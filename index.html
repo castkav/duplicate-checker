@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Duplicate Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: jeden sloupec – vstup, výsledek ke zkopírování, chyby, možné překlepy, odstraněné duplicity */
+:root {
+  --bg: #edf0f4;
+  --surface: #ffffff;
+  --sunken: #f5f7fa;
+  --ink: #141b26;
+  --muted: #586376;
+  --line: #d5dbe4;
+  --accent: #2446c2;
+  --bad: #b3261e;
+  --bad-soft: #fcebea;
+  --warn: #8a5300;
+  --warn-soft: #fff2d9;
+  --ok: #1b7040;
+  --ok-soft: #e3f4e9;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131a; --surface: #161d27; --sunken: #121820; --ink: #e5eaf1; --muted: #97a2b4; --line: #2a3441;
+    --accent: #8aa4ff; --bad: #ff8a80; --bad-soft: #3a1d1c; --warn: #f2b85b; --warn-soft: #3a2b12; --ok: #6fd49a; --ok-soft: #143020;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131a; --surface: #161d27; --sunken: #121820; --ink: #e5eaf1; --muted: #97a2b4; --line: #2a3441;
+  --accent: #8aa4ff; --bad: #ff8a80; --bad-soft: #3a1d1c; --warn: #f2b85b; --warn-soft: #3a2b12; --ok: #6fd49a; --ok-soft: #143020;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-sans); }
+.wrap {
+  max-width: 920px;
+  margin: 0 auto;
+  padding-inline: clamp(16px, 3vw, 28px);
+  padding-block: 24px 48px;
+  display: grid;
+  gap: 16px;
+}
+h1 { margin: 0; font-size: 26px; line-height: 1.15; font-weight: 700; letter-spacing: -.02em; }
+.intro { margin: 4px 0 0; color: var(--muted); max-width: 66ch; }
+
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.box-head {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+}
+.box-head h2 { margin: 0; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.box-head .note { font-size: 13px; color: var(--muted); }
+.badge { font: 600 13px/1 var(--font-mono); border-radius: 999px; padding: 4px 9px; font-variant-numeric: tabular-nums; }
+.badge.b-bad { color: var(--bad); background: var(--bad-soft); }
+.badge.b-warn { color: var(--warn); background: var(--warn-soft); }
+.badge.b-ok { color: var(--ok); background: var(--ok-soft); }
+.badge.b-n { color: var(--muted); background: var(--sunken); }
+
+button, select {
+  font: 500 13px/1 var(--font-sans); color: var(--ink); background: var(--sunken);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 11px; cursor: pointer;
+}
+select { padding: 6px 8px; }
+button:hover, select:hover { border-color: var(--muted); }
+button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+:root[data-theme="dark"] button.primary { color: #0e131a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0e131a; } }
+button.primary:disabled { opacity: .45; cursor: default; }
+.btns { display: flex; gap: 6px; }
+
+textarea.field {
+  display: block; width: 100%; min-height: 150px; resize: vertical;
+  border: 0; outline: none; background: transparent; color: var(--ink);
+  font: 14px/1.7 var(--font-mono); padding: 14px 16px; word-break: break-all;
+}
+#output { min-height: 120px; background: var(--sunken); border-radius: 0 0 10px 10px; }
+.box.input:focus-within { border-color: var(--accent); }
+
+.stats { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.stats b { font: 600 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+.stats .bad b { color: var(--bad); }
+.stats .warn b { color: var(--warn); }
+.opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.opts label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.opts input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+
+.empty { padding: 16px; color: var(--muted); }
+.empty.ok { color: var(--ok); font-weight: 500; }
+
+.row { padding: 12px 16px; border-top: 1px solid var(--line); display: grid; gap: 4px; min-width: 0; }
+.row:first-child { border-top: 0; }
+.row-top { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.row .addr { font: 15px/1.9 var(--font-mono); word-break: break-all; white-space: pre-wrap; min-width: 0; }
+.row .cnt { font: 600 13px var(--font-mono); color: var(--muted); flex: none; font-variant-numeric: tabular-nums; }
+.row .forms { font: 13px var(--font-mono); color: var(--muted); word-break: break-all; }
+.probs { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 14px; }
+.probs li { display: flex; align-items: baseline; gap: 10px; }
+.probs li::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 2px; align-self: center; }
+.sec-bad .probs li::before { background: var(--bad); }
+.sec-warn .probs li::before { background: var(--warn); }
+.probs .what { min-width: 0; flex: 1 1 0; }
+.sug { font-family: var(--font-mono); font-weight: 600; word-break: break-all; }
+.inlist { font-size: 12px; color: var(--ok); background: var(--ok-soft); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+
+.mk { border-radius: 3px; color: var(--bad); background: var(--bad-soft); font-weight: 600; padding: 0 1px; }
+
+.more { padding: 10px 16px; border-top: 1px solid var(--line); }
+.foot { color: var(--muted); font-size: 13px; margin: 0; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Duplicate Checker</h1>
+    <p class="intro">Vložte e-mailové adresy oddělené středníkem. Pod polem dostanete seznam seřazený od A do Z bez duplicit, připravený ke zkopírování, a upozornění na možné chyby a překlepy.</p>
+  </header>
+
+  <section class="box input">
+    <div class="box-head">
+      <h2><label for="input">Vložte adresy</label></h2>
+      <div class="btns">
+        <button type="button" id="btnClear">Vymazat</button>
+      </div>
+    </div>
+    <textarea class="field" id="input" spellcheck="false" autocomplete="off" placeholder="Sem vložte e-mailové adresy oddělené středníkem (nebo každou na nový řádek)"></textarea>
+  </section>
+
+  <section class="box" aria-labelledby="hOut">
+    <div class="box-head">
+      <h2 id="hOut">Seřazeno, bez duplicit <span class="badge b-n" id="cOut">0</span></h2>
+      <button type="button" class="primary" id="btnCopy" disabled>Kopírovat</button>
+    </div>
+    <div class="stats" id="stats" aria-live="polite"></div>
+    <div class="opts">
+      <label>Oddělovač
+        <select id="optSep">
+          <option value=";">středník</option>
+          <option value="; ">středník a mezera</option>
+          <option value="&#10;">každá na nový řádek</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="optTrail" checked> středník i za poslední adresou</label>
+      <label><input type="checkbox" id="optCz"> řadit česky (ch až za h)</label>
+    </div>
+    <textarea class="field" id="output" readonly spellcheck="false" aria-label="Výsledný seznam"></textarea>
+  </section>
+
+  <section class="box sec-bad" aria-labelledby="hBad">
+    <div class="box-head">
+      <h2 id="hBad">Chyby <span class="badge b-ok" id="cBad">0</span></h2>
+      <span class="note">Na tyto adresy e-mail nedojde</span>
+    </div>
+    <div id="listBad"></div>
+  </section>
+
+  <section class="box sec-warn" aria-labelledby="hWarn">
+    <div class="box-head">
+      <h2 id="hWarn">Možné překlepy <span class="badge b-ok" id="cWarn">0</span></h2>
+      <span class="note">Jméno, příjmení, doména, podobné adresy</span>
+    </div>
+    <div id="listWarn"></div>
+  </section>
+
+  <section class="box" aria-labelledby="hDup">
+    <div class="box-head">
+      <h2 id="hDup">Odstraněné duplicity <span class="badge b-n" id="cDup">0</span></h2>
+      <span class="note">Velikost písmen se nerozlišuje</span>
+    </div>
+    <div id="listDup"></div>
+  </section>
+
+  <p class="foot">Text se nikam neodesílá, vše běží jen ve vašem prohlížeči. Řazení a odstranění duplicit je přesné. Možné překlepy jsou jen odhad, nic se samo neopravuje.</p>
+</main>
+
+<script>
+(() => {
+const $ = (s) => document.querySelector(s);
+
+/* ---------- Neviditelné a podobné znaky ---------- */
+
+const NAMED_INVISIBLE = new Map([
+  [0x0009, ['TAB', 'tabulátor']],
+  [0x00A0, ['NBSP', 'nezlomitelná mezera']],
+  [0x00AD, ['SHY', 'měkký spojovník']],
+  [0x034F, ['CGJ', 'neviditelný spojovač']],
+  [0x061C, ['ALM', 'arabská značka směru']],
+  [0x180E, ['MVS', 'mongolský oddělovač']],
+  [0x200B, ['ZWSP', 'mezera nulové šířky']],
+  [0x200C, ['ZWNJ', 'nespojovač nulové šířky']],
+  [0x200D, ['ZWJ', 'spojovač nulové šířky']],
+  [0x200E, ['LRM', 'značka směru zleva doprava']],
+  [0x200F, ['RLM', 'značka směru zprava doleva']],
+  [0x2028, ['LS', 'oddělovač řádků']],
+  [0x2029, ['PS', 'oddělovač odstavců']],
+  [0x202F, ['NNBSP', 'úzká nezlomitelná mezera']],
+  [0x205F, ['MMSP', 'matematická mezera']],
+  [0x2060, ['WJ', 'neviditelný spojovač slov']],
+  [0x3000, ['IDSP', 'ideografická mezera']],
+  [0xFEFF, ['BOM', 'značka pořadí bajtů (BOM)']],
+]);
+
+function invisibleInfo(cp) {
+  if (cp === 0x20) return null;
+  if (NAMED_INVISIBLE.has(cp)) return NAMED_INVISIBLE.get(cp);
+  if (cp < 0x20 || (cp >= 0x7F && cp <= 0x9F)) return ['CTRL', 'řídicí znak'];
+  if (cp >= 0x2000 && cp <= 0x200A) return ['SP', 'typografická mezera'];
+  if ((cp >= 0x202A && cp <= 0x202E) || (cp >= 0x2066 && cp <= 0x2069)) return ['BIDI', 'řídicí znak směru textu'];
+  if ((cp >= 0xFE00 && cp <= 0xFE0F) || (cp >= 0xE0100 && cp <= 0xE01EF)) return ['VS', 'selektor variant'];
+  if (cp >= 0xE0000 && cp <= 0xE007F) return ['TAG', 'tagový znak'];
+  const ch = String.fromCodePoint(cp);
+  if (/\p{Cf}/u.test(ch)) return ['FMT', 'neviditelný formátovací znak'];
+  if (/\p{Z}/u.test(ch)) return ['SP', 'mezera ze sady Unicode'];
+  return null;
+}
+
+const HOMOGLYPHS = new Map();
+{
+  const pairs = 'аaеeоoрpсcуyхxіiјjѕsԁdԛqԝwһhӏl' +
+    'АAВBЕEКKМMНHОOРPСCТTХXІIЈJЅS' +
+    'οoαaνvιiκkρpυu' +
+    'ΑAΒBΕEΖZΗHΙIΚKΜMΝNΟOΡPΤTΥYΧX';
+  for (let i = 0; i < pairs.length; i += 2) HOMOGLYPHS.set(pairs[i], pairs[i + 1]);
+}
+
+function asciiTwin(ch) {
+  const cp = ch.codePointAt(0);
+  if (cp >= 0xFF01 && cp <= 0xFF5E) return String.fromCharCode(cp - 0xFEE0);
+  if (ch === '﹫') return '@';
+  if ('․。﹒'.includes(ch)) return '.';
+  if ('‐‑‒–—−﹣'.includes(ch)) return '-';
+  if (HOMOGLYPHS.has(ch)) return HOMOGLYPHS.get(ch);
+  const base = ch.normalize('NFD').replace(/\p{M}+/gu, '');
+  return /^[A-Za-z]+$/.test(base) ? base : ch;
+}
+
+function hex(cp) { return 'U+' + cp.toString(16).toUpperCase().padStart(4, '0'); }
+
+function describe(ch) {
+  const cp = ch.codePointAt(0);
+  if (cp >= 0xFF01 && cp <= 0xFF5E) return `znak plné šířky, vypadá jako „${String.fromCharCode(cp - 0xFEE0)}“`;
+  if (HOMOGLYPHS.has(ch)) return `${cp < 0x400 ? 'řecké písmeno' : 'písmeno z cyrilice'}, vypadá jako latinské „${HOMOGLYPHS.get(ch)}“`;
+  const base = ch.normalize('NFD').replace(/\p{M}+/gu, '');
+  if (base !== ch && /^[A-Za-z]+$/.test(base)) return 'písmeno s diakritikou';
+  if ('‐‑‒–—−﹣'.includes(ch)) return 'typografická pomlčka';
+  if (/\p{L}/u.test(ch)) return 'písmeno mimo ASCII';
+  return 'znak mimo ASCII';
+}
+
+/* ---------- Formát adresy ---------- */
+
+const LOCAL_OK = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]$/;
+
+function formatErrors(addr) {
+  const out = [];
+  const ats = addr.split('@').length - 1;
+  if (ats === 0) return ['Chybí zavináč (@).'];
+  if (ats > 1) return [`Adresa obsahuje ${ats} zavináče. Chybí středník mezi adresami?`];
+  const [local, domain] = addr.split('@');
+  if (!local) out.push('Chybí část před zavináčem.');
+  else {
+    if (local.length > 64) out.push('Část před zavináčem je delší než 64 znaků.');
+    if (local.startsWith('.')) out.push('Adresa začíná tečkou.');
+    if (local.endsWith('.')) out.push('Těsně před zavináčem je tečka.');
+    if (local.includes('..')) out.push('Dvě tečky za sebou.');
+    for (const c of new Set([...local].filter((c) => !LOCAL_OK.test(c)))) out.push(`Nepovolený znak „${c}“ před zavináčem.`);
+  }
+  if (!domain) { out.push('Chybí doména za zavináčem.'); return out; }
+  if (domain.includes(',')) out.push('V doméně je čárka místo tečky.');
+  if (domain.startsWith('.')) out.push('Doména začíná tečkou.');
+  if (domain.endsWith('.')) out.push('Doména končí tečkou.');
+  if (domain.includes('..')) out.push('Dvě tečky za sebou v doméně.');
+  for (const c of new Set([...domain].filter((c) => c !== ',' && !/[A-Za-z0-9.-]/.test(c)))) out.push(`Nepovolený znak „${c}“ v doméně.`);
+  if (!domain.includes('.') && !domain.includes(',')) out.push('Doména nemá koncovku (.cz, .com…).');
+  const labels = domain.split('.').filter(Boolean);
+  for (const l of labels) if (l.startsWith('-') || l.endsWith('-')) out.push(`Část domény „${l}“ začíná nebo končí pomlčkou.`);
+  const tld = labels.length > 1 ? labels[labels.length - 1] : '';
+  if (tld && !domain.includes(',') && !/^([A-Za-z]{2,63}|xn--[A-Za-z0-9-]+)$/.test(tld)) out.push(`Koncovka „.${tld}“ není platná.`);
+  if (addr.length > 254) out.push('Adresa je delší než 254 znaků.');
+  return out;
+}
+
+/* ---------- Domény ---------- */
+
+const KNOWN_DOMAINS = [
+  'seznam.cz', 'email.cz', 'post.cz', 'centrum.cz', 'atlas.cz', 'volny.cz', 'tiscali.cz', 'quick.cz', 'iol.cz',
+  'o2active.cz', 'upcmail.cz', 'chello.cz', 'cbox.cz', 'mybox.cz', 'outlook.cz',
+  'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'icloud.com', 'me.com', 'yahoo.com',
+  'proton.me', 'protonmail.com', 'gmx.com', 'gmx.de', 'azet.sk', 'zoznam.sk', 'post.sk', 'centrum.sk',
+];
+const KNOWN_SET = new Set(KNOWN_DOMAINS);
+const PROVIDER = { gmail: 'gmail.com', seznam: 'seznam.cz', centrum: 'centrum.cz', volny: 'volny.cz', tiscali: 'tiscali.cz',
+  hotmail: 'hotmail.com', icloud: 'icloud.com', yahoo: 'yahoo.com', googlemail: 'googlemail.com', atlas: 'atlas.cz', outlook: 'outlook.com' };
+const TLD_TYPOS = { con: 'com', cmo: 'com', ocm: 'com', vom: 'com', xom: 'com', comm: 'com', coom: 'com', cm: 'com', om: 'com', co: 'com', zc: 'cz', czz: 'cz', xz: 'cz' };
+
+// Editační vzdálenost s prohozením sousedních znaků
+function osa(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => { const r = new Array(b.length + 1).fill(0); r[0] = i; return r; });
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    const c = a[i - 1] === b[j - 1] ? 0 : 1;
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + c);
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
+}
+
+function domainHint(d) {
+  if (KNOWN_SET.has(d)) return null;
+  const parts = d.split('.');
+  const base = parts.slice(0, -1).join('.');
+  const tld = parts[parts.length - 1];
+  if (PROVIDER[base]) return { msg: `${base} nemá adresy s koncovkou .${tld}.`, sug: PROVIDER[base] };
+  let best = null;
+  for (const k of KNOWN_DOMAINS) {
+    if (Math.abs(k.length - d.length) > 2) continue;
+    const dist = osa(d, k);
+    const limit = k.length >= 9 ? 2 : 1;
+    if (dist <= limit && (!best || dist < best.dist)) best = { k, dist };
+  }
+  if (best) return { msg: 'Překlep v doméně?', sug: best.k };
+  if (TLD_TYPOS[tld] && parts.length > 1) return { msg: `Koncovka „.${tld}“ vypadá jako překlep.`, sug: base + '.' + TLD_TYPOS[tld] };
+  return null;
+}
+
+/* ---------- Jména a příjmení ---------- */
+
+const FEMALE_OF = {
+  alexandr: 'alexandra', adrian: 'adriana', antonin: 'antonie', bohumil: 'bohumila', bohuslav: 'bohuslava', bronislav: 'bronislava',
+  daniel: 'daniela', denis: 'denisa', dominik: 'dominika', emil: 'emilie', erik: 'erika', frantisek: 'frantiska', gabriel: 'gabriela',
+  ivan: 'ivana', ivo: 'iva', jan: 'jana', jaroslav: 'jaroslava', jindrich: 'jindriska', jiri: 'jirina', josef: 'josefa', julius: 'julie',
+  kamil: 'kamila', karel: 'karla', kristian: 'kristyna', ladislav: 'ladislava', lubomir: 'lubomira', marcel: 'marcela', martin: 'martina',
+  michal: 'michaela', milan: 'milena', miloslav: 'miloslava', miroslav: 'miroslava', nikolas: 'nikola', oldrich: 'oldriska',
+  patrik: 'patricie', pavel: 'pavla', petr: 'petra', radek: 'radka', radoslav: 'radoslava', robert: 'roberta', roman: 'romana',
+  rostislav: 'rostislava', simon: 'simona', stanislav: 'stanislava', stepan: 'stepanka', vaclav: 'vaclava', viktor: 'viktorie',
+  vladimir: 'vladimira', vlastimil: 'vlastimila', zdenek: 'zdenka', jaromir: 'jaromira', vitezslav: 'vitezslava', bretislav: 'bretislava',
+};
+const MALE_OF = Object.fromEntries(Object.entries(FEMALE_OF).map(([m, f]) => [f, m]));
+const MALE = new Set([...Object.keys(FEMALE_OF),
+  'tomas', 'jakub', 'lukas', 'ondrej', 'vojtech', 'matej', 'adam', 'filip', 'david', 'ales', 'libor', 'vit', 'marek', 'igor', 'radim',
+  'richard', 'matyas', 'leos', 'alois', 'eduard', 'hynek', 'ludek', 'otakar', 'ota', 'rudolf', 'zbynek', 'dusan', 'samuel', 'oliver',
+  'tobias', 'vilem', 'vratislav', 'krystof', 'mikulas', 'prokop', 'tadeas', 'svatopluk', 'premysl', 'zikmund', 'bedrich', 'cyril',
+  'metodej', 'ctibor', 'dalibor', 'hubert', 'jonas', 'mojmir', 'norbert', 'oskar', 'otto', 'radovan', 'teodor', 'vincenc', 'jachym',
+  'vladislav', 'bohdan', 'lubos', 'milos', 'arnost', 'kvetoslav', 'robin', 'rene', 'ludvik', 'sebastian', 'benjamin', 'kristof',
+  'mario', 'alex', 'max', 'tom', 'dan', 'john', 'peter', 'paul', 'thomas', 'michael', 'george', 'mark', 'jozef', 'juraj', 'stefan',
+  'lubomir', 'jaroslav', 'ladislav', 'miloslav', 'mirek', 'honza', 'pepa', 'standa', 'franta', 'vasek', 'jirka', 'tonda', 'kuba']);
+const FEMALE = new Set([...Object.values(FEMALE_OF),
+  'marie', 'eva', 'hana', 'anna', 'lenka', 'katerina', 'lucie', 'vera', 'alena', 'veronika', 'jitka', 'tereza', 'ludmila', 'helena',
+  'monika', 'eliska', 'zuzana', 'marketa', 'jarmila', 'barbora', 'klara', 'karolina', 'dana', 'andrea', 'irena', 'natalie', 'sarka',
+  'vlasta', 'iveta', 'renata', 'blanka', 'olga', 'dagmar', 'sabina', 'silvie', 'aneta', 'magdalena', 'libuse', 'bozena', 'vendula',
+  'ilona', 'sona', 'kristina', 'alzbeta', 'sofie', 'ema', 'rozalie', 'nela', 'valerie', 'hedvika', 'zofie', 'radmila', 'drahomira',
+  'miluse', 'blazena', 'kveta', 'yvona', 'ivona', 'lada', 'lea', 'linda', 'beata', 'regina', 'zaneta', 'sandra', 'sara', 'laura',
+  'amalie', 'anezka', 'jolana', 'michala', 'pavlina', 'adela', 'alice', 'diana', 'edita', 'elena', 'nikol', 'stela', 'nina', 'tamara',
+  'vanda', 'zdena', 'emma', 'olivie', 'klaudie', 'maria', 'ana', 'anne', 'bara', 'agata', 'gita', 'jindra', 'denisa', 'kamila',
+  'irma', 'hanka', 'jana', 'petra', 'simona', 'martina', 'lucia', 'katarina', 'zuzka', 'lenka', 'jaroslava', 'miroslava', 'ivana']);
+const ALL_NAMES = [...new Set([...MALE, ...FEMALE])];
+// Části adresy, které nejsou jména (info@, obchod.praha@…)
+const ROLE_WORDS = new Set(['info', 'office', 'data', 'sales', 'hr', 'it', 'team', 'support', 'kontakt', 'obchod', 'recepce', 'admin',
+  'marketing', 'servis', 'ucetni', 'ucetnictvi', 'fakturace', 'objednavky', 'noreply', 'mail', 'post', 'posta', 'podatelna', 'sekretariat',
+  'helpdesk', 'test', 'web', 'eshop', 'shop', 'firma', 'kancelar', 'reditel', 'personalni', 'nakup', 'prodej', 'sklad', 'zakaznik']);
+const ADJ_FEM = { nova: 'novy', mala: 'maly', cerna: 'cerny', bila: 'bily', cervena: 'cerveny', zelena: 'zeleny', mlada: 'mlady',
+  stara: 'stary', dlouha: 'dlouhy', kratka: 'kratky', hruba: 'hruby', ticha: 'tichy', vesela: 'vesely', hola: 'holy', sucha: 'suchy',
+  novotna: 'novotny', dvorska: 'dvorsky', kopecka: 'kopecky' };
+
+function strip(s) { return s.toLowerCase().normalize('NFD').replace(/\p{M}+/gu, ''); }
+function isName(t) { return MALE.has(t) || FEMALE.has(t); }
+
+function isFemaleSurname(s) {
+  return (s.length > 4 && s.endsWith('ova')) || /(sk|ck|tn)a$/.test(s) || s in ADJ_FEM;
+}
+function maleSurnameFromFemale(s) {
+  if (s in ADJ_FEM) return ADJ_FEM[s];
+  if (/(sk|ck|tn)a$/.test(s)) return s.slice(0, -1) + 'y';
+  let m = s.slice(0, -3);
+  if (/[^aeiou]k$/.test(m)) m = m.slice(0, -1) + 'ek';
+  return m;
+}
+function femaleSurnameFromMale(s) {
+  if (s.length < 3) return null;
+  if (/[^aeiou]y$/.test(s)) return s.slice(0, -1) + 'a';
+  if (/[aeiouy]$/.test(s)) return null;
+  if (/ec$/.test(s)) return '';
+  if (/[^aeiou]ek$/.test(s)) return s.slice(0, -2) + 'kova';
+  return s + 'ova';
+}
+
+// Rozloží část před zavináčem na jméno a příjmení (jan.novak, novak.jan, jan_novak…)
+function splitName(local) {
+  const parts = local.split(/([._-]+)/);
+  const words = [];
+  parts.forEach((p, i) => { if (i % 2 === 0 && /^[a-z]{2,}$/.test(strip(p))) words.push({ i, raw: p, t: strip(p) }); });
+  if (words.length !== 2 || parts.length !== 3) return null;
+  if (words.some((w) => ROLE_WORDS.has(w.t))) return null;
+  let [first, sur] = words;
+  if (!isName(first.t) && isName(sur.t)) [first, sur] = [sur, first];
+  const build = (idx, val) => parts.map((p, i) => (i === idx ? val : p)).join('');
+  return { first, sur, build };
+}
+
+// Mužské jméno + ženské příjmení a naopak
+function nameHint(n) {
+  const { first, sur, build } = n;
+  if (!isName(first.t) || isName(sur.t)) return null;
+  if (MALE.has(first.t) && !FEMALE.has(first.t) && isFemaleSurname(sur.t)) {
+    const sugs = [];
+    if (FEMALE_OF[first.t]) sugs.push(build(first.i, FEMALE_OF[first.t]));
+    sugs.push(build(sur.i, maleSurnameFromFemale(sur.t)));
+    return { msg: `Mužské jméno „${first.raw}“ a ženské příjmení „${sur.raw}“.`, sugs };
+  }
+  if (FEMALE.has(first.t) && !MALE.has(first.t)) {
+    const fem = femaleSurnameFromMale(sur.t);
+    if (fem === null || isFemaleSurname(sur.t)) return null;
+    const sugs = [];
+    if (MALE_OF[first.t]) sugs.push(build(first.i, MALE_OF[first.t]));
+    if (fem) sugs.push(build(sur.i, fem));
+    return { msg: `Ženské jméno „${first.raw}“ a mužský tvar příjmení „${sur.raw}“.`, sugs };
+  }
+  return null;
+}
+
+// Překlep v koncovce -ová: novakov, novakvoa, novakoa, novakovaa → novakova
+function suffixHint(n) {
+  const { first, sur, build } = n;
+  if (MALE.has(first.t) && !FEMALE.has(first.t)) return null;
+  const s = sur.t;
+  // Prohozená písmena v -ská / -cká: medzihorsak → medzihorska
+  if (FEMALE.has(first.t) && s.length > 5 && /[sc]ak$/.test(s)) {
+    return { msg: `Příjmení „${sur.raw}“ – překlep v koncovce -ská / -cká?`, sugs: [build(sur.i, s.slice(0, -2) + 'ka')] };
+  }
+  if (s.endsWith('ova')) return null;
+  const stem = s.replace(/[ova]{1,4}$/, '');
+  const tail = s.slice(stem.length);
+  if (stem.length < 3 || !tail || tail.endsWith('ava') || /[aeiouy]$/.test(stem)) return null;
+  if (!tail.includes('o') && !FEMALE.has(first.t)) return null;
+  if (osa(tail, 'ova') !== 1) return null;
+  return { msg: `Příjmení „${sur.raw}“ – překlep v koncovce -ová?`, sugs: [build(sur.i, stem + 'ova')] };
+}
+
+// Jméno, které se jen o písmeno liší od běžného jména: ja → jan, petrr → petr
+function firstNameHint(n) {
+  const { first, sur, build } = n;
+  if (isName(first.t) || isName(sur.t)) return null;
+  const female = isFemaleSurname(sur.t);
+  const cands = ALL_NAMES.filter((x) => Math.abs(x.length - first.t.length) <= 1 && osa(first.t, x) === 1);
+  if (!cands.length) return null;
+  // Ke ženskému příjmení ženská jména, k mužskému mužská
+  const fit = cands.filter((x) => (female ? FEMALE.has(x) : MALE.has(x)));
+  const pick = (fit.length ? fit : cands).slice(0, 3);
+  return { msg: `„${first.raw}“ není běžné jméno.`, sugs: pick.map((x) => build(first.i, x)) };
+}
+
+/* ---------- Načtení seznamu ---------- */
+
+// Středník, nový řádek a znaky, které vypadají jako středník
+const SEPARATORS = /[;\n\r;；﹔؛⁏]/;
+
+function cleanSegment(seg) {
+  let text = '';
+  const removed = [];
+  for (const ch of seg) {
+    const cp = ch.codePointAt(0);
+    const inv = invisibleInfo(cp);
+    if (!inv) { text += ch; continue; }
+    if (cp === 0x09 || /\p{Z}/u.test(ch)) { text += ' '; continue; } // NBSP, tabulátor… = obyčejná mezera
+    removed.push(inv);
+  }
+  return { text, removed };
+}
+
+function parse(text) {
+  const entries = [];
+  for (const seg of text.split(SEPARATORS)) {
+    const { text: clean, removed } = cleanSegment(seg);
+    const t = clean.trim();
+    if (!t) continue;
+    let addrs;
+    const bracketed = [...t.matchAll(/<([^<>]*)>/g)].map((m) => m[1]);
+    if (bracketed.length) addrs = bracketed;                                      // Jan Novák <jan.novak@firma.cz>
+    else if ((t.match(/@/g) || []).length >= 2) addrs = t.split(/[\s,]+/).filter((x) => x.includes('@')); // čárky, mezery
+    else addrs = [t];
+    for (let a of addrs) {
+      a = a.trim().replace(/^mailto:/i, '').replace(/^["'„“”‚‘’([]+|["'„“”‚‘’)\]]+$/g, '').trim();
+      if (a) entries.push({ addr: a, removed });
+    }
+  }
+  return entries;
+}
+
+/* ---------- Rozbor ---------- */
+
+function analyze(text, czech) {
+  const entries = parse(text);
+  const groups = new Map();
+  for (const e of entries) {
+    const key = e.addr.toLowerCase();
+    let g = groups.get(key);
+    if (!g) { g = { key, count: 0, forms: new Set(), removed: new Map(), bad: [], warn: [] }; groups.set(key, g); }
+    g.count++;
+    g.forms.add(e.addr);
+    for (const [s, d] of e.removed) g.removed.set(s, d);
+  }
+
+  const list = [...groups.values()];
+  const plain = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  if (czech) {
+    const coll = new Intl.Collator('cs').compare;
+    list.sort((a, b) => coll(a.key, b.key) || plain(a.key, b.key));
+  } else list.sort((a, b) => plain(a.key, b.key));
+
+  // Domény v seznamu: kolikrát se která vyskytuje
+  const domCount = new Map();
+  for (const g of list) {
+    const p = g.key.split('@');
+    if (p.length === 2 && p[1]) domCount.set(p[1], (domCount.get(p[1]) || 0) + 1);
+  }
+  const frequent = [...domCount].filter(([, c]) => c >= 2).sort((a, b) => b[1] - a[1]).slice(0, 200);
+  const domCache = new Map();
+  const listDomainHint = (d) => {
+    if (domCache.has(d)) return domCache.get(d);
+    const c = domCount.get(d) || 0;
+    let best = null;
+    if (!KNOWN_SET.has(d)) {
+      for (const [D, C] of frequent) {
+        if (D === d || C < 2 * c || Math.abs(D.length - d.length) > 2) continue;
+        const lim = Math.min(d.length, D.length) >= 10 ? 2 : 1;
+        if (osa(d, D) <= lim && (!best || C > best.C)) best = { D, C };
+      }
+    }
+    domCache.set(d, best);
+    return best;
+  };
+  const dhCache = new Map();
+  const cachedDomainHint = (d) => { if (!dhCache.has(d)) dhCache.set(d, domainHint(d)); return dhCache.get(d); };
+
+  for (const g of list) {
+    const chars = [...g.key];
+    // Znaky mimo ASCII a mezery uvnitř adresy
+    const odd = [...new Set(chars.filter((c) => c === ' ' || c.codePointAt(0) > 0x7E))];
+    for (const c of odd) {
+      if (c === ' ') g.bad.push({ msg: 'Uvnitř adresy je mezera.', sugs: [] });
+      else g.bad.push({ msg: `Znak „${c}“ (${hex(c.codePointAt(0))}): ${describe(c)}.`, sugs: [] });
+    }
+    const ascii = chars.map((c) => (c === ' ' ? '' : c.codePointAt(0) > 0x7E ? asciiTwin(c).toLowerCase() : c)).join('');
+    if (odd.length && !odd.includes(' ') && /^[\x21-\x7e]+$/.test(ascii) && ascii !== g.key) g.bad[g.bad.length - 1].sugs.push(ascii);
+    for (const msg of formatErrors(ascii)) g.bad.push({ msg, sugs: [] });
+
+    if (g.removed.size) {
+      const what = [...g.removed].map(([s, d]) => `${d} (${s})`).join(', ');
+      g.warn.push({ msg: `Obsahovala neviditelný znak: ${what}. Ve výsledku je odstraněn.`, sugs: [] });
+    }
+
+    const p = ascii.split('@');
+    if (p.length !== 2 || !p[0] || !p[1]) continue;
+    const [local, domain] = p;
+    const dh = cachedDomainHint(domain);
+    if (dh) g.warn.push({ msg: dh.msg, sugs: [local + '@' + dh.sug] });
+    else {
+      const ld = listDomainHint(domain);
+      if (ld) g.warn.push({ msg: `Ostatní adresy v seznamu mají doménu ${ld.D} (${ld.C}×).`, sugs: [local + '@' + ld.D] });
+    }
+    const n = splitName(local);
+    if (n) {
+      const h = suffixHint(n) || nameHint(n) || firstNameHint(n);
+      if (h) g.warn.push({ msg: h.msg, sugs: h.sugs.map((s) => s + '@' + domain) });
+    }
+  }
+
+  similarPairs(list);
+  return { entries: entries.length, list, groups };
+}
+
+// Dvojice adres se stejnou doménou, které se liší jediným znakem (jana.novakova × jana.novakvoa)
+function similarPairs(list) {
+  const buckets = new Map();
+  list.forEach((g, idx) => {
+    const p = g.key.split('@');
+    if (p.length !== 2 || p[0].length < 4 || !p[1]) return;
+    const local = p[0];
+    const keys = new Set([local]);
+    for (let k = 0; k < local.length; k++) keys.add(local.slice(0, k) + local.slice(k + 1));
+    for (const v of keys) {
+      const bk = p[1] + '@' + v;
+      let b = buckets.get(bk);
+      if (!b) buckets.set(bk, (b = []));
+      if (b.length < 40) b.push(idx);
+    }
+  });
+  const done = new Set();
+  for (const b of buckets.values()) {
+    for (let x = 0; x < b.length; x++) for (let y = x + 1; y < b.length; y++) {
+      const pk = b[x] * 1e6 + b[y];
+      if (done.has(pk)) continue;
+      done.add(pk);
+      const A = list[b[x]], B = list[b[y]];
+      const la = A.key.split('@')[0], lb = B.key.split('@')[0];
+      if (osa(la, lb) !== 1) continue;
+      if (la.replace(/\d+/g, '#') === lb.replace(/\d+/g, '#')) continue;          // novak1 × novak2
+      const ta = la.split(/[._-]+/), tb = lb.split(/[._-]+/);
+      if (ta.length === tb.length) {
+        const diff = ta.map((t, i) => i).filter((i) => ta[i] !== tb[i]);
+        if (diff.length === 1) {
+          const wa = strip(ta[diff[0]]), wb = strip(tb[diff[0]]);
+          if (isName(wa) && isName(wb)) continue;                                    // jan.novak × jana.novak
+          if (wa.length <= 2 && wb.length <= 2) continue;                            // j.novak × m.novak
+        }
+      }
+      for (const [g, other] of [[A, B], [B, A]]) {
+        if (g.warn.some((w) => w.sugs.includes(other.key))) continue;
+        g.warn.push({ msg: 'Liší se jediným znakem od', ref: other.key, sugs: [] });
+      }
+    }
+  }
+}
+
+/* ---------- Vykreslení ---------- */
+
+const input = $('#input');
+const output = $('#output');
+const optSep = $('#optSep'), optTrail = $('#optTrail'), optCz = $('#optCz');
+const LIMIT = 300;
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+function plural(n, one, few, many) { return n === 1 ? one : n >= 2 && n <= 4 ? few : many; }
+
+function renderAddr(key) {
+  const box = el('span', 'addr');
+  let buf = '';
+  const flush = () => { if (buf) { box.appendChild(document.createTextNode(buf)); buf = ''; } };
+  for (const c of key) {
+    if (c === ' ' || c.codePointAt(0) > 0x7E) {
+      flush();
+      const m = el('span', 'mk', c === ' ' ? '␣' : c);
+      m.title = hex(c.codePointAt(0));
+      box.appendChild(m);
+    } else buf += c;
+  }
+  flush();
+  return box;
+}
+
+function badge(id, n, cls) {
+  const b = $(id);
+  b.textContent = n;
+  b.className = 'badge ' + (n ? cls : 'b-ok');
+}
+
+function renderList(container, rows, emptyText, okText, hasInput) {
+  container.textContent = '';
+  if (!hasInput) { container.appendChild(el('div', 'empty', emptyText)); return; }
+  if (!rows.length) { container.appendChild(el('div', 'empty ok', okText)); return; }
+  const frag = document.createDocumentFragment();
+  let shown = 0;
+  const draw = (from) => {
+    const part = document.createDocumentFragment();
+    for (const r of rows.slice(from, from + LIMIT)) part.appendChild(r());
+    shown = Math.min(rows.length, from + LIMIT);
+    return part;
+  };
+  frag.appendChild(draw(0));
+  container.appendChild(frag);
+  if (shown < rows.length) {
+    const more = el('div', 'more');
+    const btn = el('button', null, '');
+    btn.type = 'button';
+    const label = () => { btn.textContent = `Zobrazit další (zbývá ${rows.length - shown})`; };
+    label();
+    btn.addEventListener('click', () => {
+      container.insertBefore(draw(shown), more);
+      if (shown >= rows.length) more.remove(); else label();
+    });
+    more.appendChild(btn);
+    container.appendChild(more);
+  }
+}
+
+function probRow(g, items, groups) {
+  return () => {
+    const r = el('div', 'row');
+    const top = el('div', 'row-top');
+    top.appendChild(renderAddr(g.key));
+    r.appendChild(top);
+    const ul = el('ul', 'probs');
+    for (const w of items) {
+      const li = el('li');
+      const what = el('span', 'what', w.msg);
+      if (w.ref) {
+        what.append(' ', el('span', 'sug', w.ref), '. Není jedna z nich překlep?');
+      } else if (w.sugs.length) {
+        what.appendChild(document.createTextNode(' Nemá být '));
+        w.sugs.forEach((s, k) => {
+          if (k) what.appendChild(document.createTextNode(' nebo '));
+          what.appendChild(el('span', 'sug', s));
+          if (groups.has(s)) what.append(' ', el('span', 'inlist', 'je už v seznamu'));
+        });
+        what.appendChild(document.createTextNode('?'));
+      }
+      li.appendChild(what);
+      ul.appendChild(li);
+    }
+    r.appendChild(ul);
+    return r;
+  };
+}
+
+function dupRow(g) {
+  return () => {
+    const r = el('div', 'row');
+    const top = el('div', 'row-top');
+    top.append(el('span', 'cnt', g.count + '×'), renderAddr(g.key));
+    r.appendChild(top);
+    if (g.forms.size > 1 || ![...g.forms].every((f) => f === g.key)) {
+      r.appendChild(el('div', 'forms', 'V seznamu jako: ' + [...g.forms].join(', ')));
+    }
+    return r;
+  };
+}
+
+function run() {
+  const text = input.value;
+  const res = analyze(text, optCz.checked);
+  const { list, groups } = res;
+  const has = list.length > 0;
+
+  const sep = optSep.value;
+  let out = list.map((g) => g.key).join(sep);
+  if (out && sep !== '\n' && optTrail.checked) out += ';';
+  output.value = out;
+  $('#btnCopy').disabled = !has;
+  optTrail.disabled = sep === '\n';
+
+  const dups = list.filter((g) => g.count > 1);
+  const removed = res.entries - list.length;
+  const bad = list.filter((g) => g.bad.length);
+  const warn = list.filter((g) => g.warn.length);
+
+  $('#cOut').textContent = list.length;
+  badge('#cBad', bad.length, 'b-bad');
+  badge('#cWarn', warn.length, 'b-warn');
+  $('#cDup').textContent = removed;
+  $('#cDup').className = 'badge b-n';
+
+  const stats = $('#stats');
+  stats.textContent = '';
+  if (!has) stats.appendChild(el('span', null, 'Výsledek se objeví, jakmile vložíte adresy.'));
+  else {
+    const item = (cls, n, word) => { const s = el('span', cls); s.append(el('b', null, String(n)), ' ' + word); stats.appendChild(s); };
+    item(null, res.entries, plural(res.entries, 'vložená adresa', 'vložené adresy', 'vložených adres'));
+    item(null, removed, plural(removed, 'duplicita odstraněna', 'duplicity odstraněny', 'duplicit odstraněno'));
+    item(null, list.length, plural(list.length, 'adresa ve výsledku', 'adresy ve výsledku', 'adres ve výsledku'));
+    if (bad.length) item('bad', bad.length, plural(bad.length, 'chyba', 'chyby', 'chyb'));
+    if (warn.length) item('warn', warn.length, plural(warn.length, 'možný překlep', 'možné překlepy', 'možných překlepů'));
+  }
+
+  renderList($('#listBad'), bad.map((g) => probRow(g, g.bad, groups)), 'Vložte adresy do pole nahoře.',
+    'Žádné chyby. Všechny adresy mají správný formát.', has);
+  renderList($('#listWarn'), warn.map((g) => probRow(g, g.warn, groups)), 'Zatím nic ke kontrole.',
+    'Žádné podezřelé překlepy.', has);
+  renderList($('#listDup'), dups.map(dupRow), 'Zatím nic ke kontrole.', 'Žádné duplicity, každá adresa je v seznamu jen jednou.', has);
+}
+
+/* ---------- Ovládání ---------- */
+
+const store = {
+  get(k) { try { return localStorage.getItem('dc.' + k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem('dc.' + k, v); } catch { /* nic */ } },
+};
+{
+  const s = store.get('sep');
+  if (s != null && [...optSep.options].some((o) => o.value === s)) optSep.value = s;
+  if (store.get('trail') != null) optTrail.checked = store.get('trail') === '1';
+  if (store.get('cz') != null) optCz.checked = store.get('cz') === '1';
+}
+optSep.addEventListener('change', () => { store.set('sep', optSep.value); run(); });
+optTrail.addEventListener('change', () => { store.set('trail', optTrail.checked ? '1' : '0'); run(); });
+optCz.addEventListener('change', () => { store.set('cz', optCz.checked ? '1' : '0'); run(); });
+
+let timer;
+input.addEventListener('input', () => {
+  clearTimeout(timer);
+  timer = setTimeout(run, input.value.length > 20000 ? 300 : 80);
+});
+
+$('#btnClear').addEventListener('click', () => { input.value = ''; run(); input.focus(); });
+
+$('#btnCopy').addEventListener('click', async () => {
+  const btn = $('#btnCopy');
+  let ok = false;
+  try { await navigator.clipboard.writeText(output.value); ok = true; } catch {
+    output.focus();
+    output.select();
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+  }
+  btn.textContent = ok ? 'Zkopírováno ✓' : 'Označeno, stiskněte Ctrl+C';
+  if (!ok) { output.focus(); output.select(); }
+  setTimeout(() => { btn.textContent = 'Kopírovat'; }, 1800);
+});
+
+output.addEventListener('focus', () => output.select());
+
+run();
+})();
+</script>
+</body>
+</html>
