@@ -18,13 +18,16 @@ Nahrazuje postup Word (`;` → `^p`) → Excel (bez duplicitních záznamů, se�
 
 **Chyby** – adresa nebude fungovat: chybí zavináč, mezera uvnitř, diakritika, znaky z cyrilice, tečky na špatném místě, chybná koncovka…
 
+Když chybí zavináč, nástroj zkusí najít, kde měl být: `kamila.novakovavipg.cz` → `kamila.novakova@ipg.cz`? (na české klávesnici je @ na AltGr+V, takže místo něj snadno vyjde „v“). Oprava se navrhne jen tehdy, když doména za ním je i u jiných adres v seznamu nebo jde o známou schránku (seznam.cz, gmail.com…).
+
 **Možné překlepy** – jen odhad, nic se samo neopravuje:
 - jméno, které se o písmeno liší od běžného jména: `ja.novak` → `jan.novak`?,
 - překlep v koncovce -ová: `anna.novakov`, `jana.novakvoa` → `novakova`?,
 - jméno nesedí k příjmení: `martin.novakova` → `martina.novakova` nebo `martin.novak`?,
 - překlep v doméně: `sezman.cz` → `seznam.cz`?, `gmail.cz` → `gmail.com`?,
 - doména, která se o písmeno liší od domény ostatních adres v seznamu: `crestcon.cz`, když zbytek má `crestcom.cz`,
-- dvě adresy v seznamu, které se liší jediným znakem.
+- dvě adresy v seznamu, které se liší jediným znakem,
+- za úplnou adresou pokračuje další text: `kamila.novakovavales@ipg.cz` → `kamila.novakova@ipg.cz`? Hlásí se jen tehdy, když první část je jinde v seznamu nebo jde o ženské jméno a příjmení na -ová/-ská/-cká a zbytek začíná dalším jménem nebo názvem domény, aby nevznikaly falešné nálezy.
 
 U navržené opravy je vidět, jestli taková adresa už v seznamu je.
 

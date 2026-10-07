@@ -551,7 +551,7 @@ function analyze(text, czech) {
     }
     const ascii = chars.map((c) => (c === ' ' ? '' : c.codePointAt(0) > 0x7E ? asciiTwin(c).toLowerCase() : c)).join('');
     if (odd.length && !odd.includes(' ') && /^[\x21-\x7e]+$/.test(ascii) && ascii !== g.key) g.bad[g.bad.length - 1].sugs.push(ascii);
-    for (const msg of formatErrors(ascii)) g.bad.push({ msg, sugs: [] });
+    for (const msg of formatErrors(ascii)) g.bad.push({ msg, sugs: msg.startsWith('Chybí zavináč') ? atHint(ascii, domCount) : [] });
 
     if (g.removed.size) {
       const what = [...g.removed].map(([s, d]) => `${d} (${s})`).join(', ');
@@ -567,6 +567,8 @@ function analyze(text, czech) {
       const ld = listDomainHint(domain);
       if (ld) g.warn.push({ msg: `Ostatní adresy v seznamu mají doménu ${ld.D} (${ld.C}×).`, sugs: [local + '@' + ld.D] });
     }
+    const mh = mergedHint(local, domain, groups);
+    if (mh) { g.warn.push(mh); continue; }
     const n = splitName(local);
     if (n) {
       const h = suffixHint(n) || nameHint(n) || firstNameHint(n);
@@ -576,6 +578,54 @@ function analyze(text, czech) {
 
   similarPairs(list);
   return { entries: entries.length, list, groups };
+}
+
+// Na české klávesnici je @ na AltGr+V, na anglické Shift+2, na německé AltGr+Q
+const AT_KEYS = 'v2q';
+
+// Adresa bez zavináče: kde měl být? Navrhne se jen tehdy, když doména za ním
+// je jinde v seznamu nebo jde o známou schránku (kamila.novakovavipg.cz → kamila.novakova@ipg.cz).
+function atHint(a, domCount) {
+  const cands = new Map();
+  const consider = (local, dom, bonus) => {
+    if (local.length < 2 || !dom.includes('.')) return;
+    const c = domCount.get(dom) || 0;
+    if (!c && !KNOWN_SET.has(dom)) return;
+    const s = local + '@' + dom;
+    if (formatErrors(s).length) return;
+    const score = c * 2 + (KNOWN_SET.has(dom) ? 1 : 0) + bonus;
+    if (!cands.has(s) || cands.get(s) < score) cands.set(s, score);
+  };
+  for (let i = 2; i < a.length - 3; i++) {
+    consider(a.slice(0, i), a.slice(i + 1), AT_KEYS.includes(a[i]) ? 1 : 0); // písmeno místo zavináče
+    consider(a.slice(0, i), a.slice(i), 0.5);                                 // zavináč vynechaný
+  }
+  const sorted = [...cands].sort((x, y) => y[1] - x[1]);
+  return sorted.filter(([, sc]) => sc === sorted[0][1]).slice(0, 2).map(([s]) => s);
+}
+
+// Úplná adresa, za kterou je navíc jeden znak a další jméno:
+// kamila.novakova + v + ales@ipg.cz. Hlásí se jen tehdy, když
+// a) první část je v seznamu se stejnou doménou, nebo jde o ženské jméno a příjmení na -ová/-ská/-cká,
+// b) zbytek začíná známým jménem nebo názvem domény.
+function mergedHint(local, domain, groups) {
+  const label = domain.split('.')[0];
+  for (let k = 3; k <= local.length - 4; k++) {
+    const c = local[k];
+    if (/[._-]/.test(c) || /[._-]$/.test(local.slice(0, k))) continue;
+    const L = local.slice(0, k), R = local.slice(k + 1);
+    const w = strip(R.split(/[._\-0-9]+/)[0] || '');
+    if (w.length < 3 || !(isName(w) || w === label)) continue;
+    let ok = groups.has(L + '@' + domain);
+    if (!ok) {
+      const n = splitName(L);
+      ok = !!n && n.sur.i === 2 && FEMALE.has(n.first.t) && /^[a-z]{3,}(ova|ska|cka)$/.test(n.sur.t);
+    }
+    if (!ok) continue;
+    const what = AT_KEYS.includes(c) ? ` Není „${c}“ omylem místo zavináče?` : '';
+    return { msg: `Za „${L}“ pokračuje ještě „${local.slice(k)}“.${what}`, sugs: [L + '@' + domain] };
+  }
+  return null;
 }
 
 // Dvojice adres se stejnou doménou, které se liší jediným znakem (jana.novakova × jana.novakvoa)
