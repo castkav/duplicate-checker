@@ -10,7 +10,8 @@ Nahrazuje postup Word (`;` → `^p`) → Excel (bez duplicitních záznamů, se�
 - adresy se dají oddělit středníkem, novým řádkem, nebo i čárkou či mezerou,
 - z tvaru `Jan Novák <jan.novak@firma.cz>` se vezme jen adresa,
 - duplicity se poznají i při jiné velikosti písmen (`Jan.Novak@Firma.cz` = `jan.novak@firma.cz`) nebo s mezerami kolem,
-- neviditelné znaky (mezera nulové šířky, BOM…) se odstraní a nástroj na ně upozorní,
+- neviditelné znaky (mezera nulové šířky, BOM…) se odstraní,
+- diakritika a podobné znaky se samy převedou bez háčků a čárek (`Šárka.Nová` → `sarka.nova`, cyrilské „а“ → „a“) a dvě tečky za sebou se nahradí jednou; dá se vypnout volbou „sám opravit diakritiku a dvě tečky“,
 - výsledek je malými písmeny, seřazený podle abecedy, s volbou oddělovače (středník, středník a mezera, nový řádek),
 - volitelně české řazení, kde „ch“ je až za „h“.
 
@@ -29,9 +30,11 @@ Když chybí zavináč, nástroj zkusí najít, kde měl být: `kamila.novakovav
 - dvě adresy v seznamu, které se liší jediným znakem,
 - za úplnou adresou pokračuje další text: `kamila.novakovavales@ipg.cz` → `kamila.novakova@ipg.cz`? Hlásí se jen tehdy, když první část je jinde v seznamu nebo jde o ženské jméno a příjmení na -ová/-ská/-cká a zbytek začíná dalším jménem nebo názvem domény, aby nevznikaly falešné nálezy.
 
-U navržené opravy je vidět, jestli taková adresa už v seznamu je.
+U navržené opravy je vidět, jestli taková adresa už v seznamu je. Vpravo je zaškrtávátko **Přijmout opravu**: po zaškrtnutí se oprava hned promítne do výsledku (a když taková adresa už v seznamu je, obě se sloučí). Opětovným odškrtnutím se oprava vrátí. Přijmout jde i opravu adresy bez zavináče v sekci Chyby.
 
 **Odstraněné duplicity** – které adresy byly v seznamu vícekrát a v jaké podobě.
+
+**Opravy** – co nástroj opravil sám (diakritika, dvě tečky, neviditelné znaky) a které navržené opravy jste přijali. Přijatou opravu jde i tady zrušit.
 
 ## Soukromí
 
